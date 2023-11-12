@@ -8,53 +8,74 @@
 import SwiftUI
 import Foundation
 
-@MainActor class User: ObservableObject {
-    @Published var name = "Jurek Ogurek"
-}
 
-struct EditView: View {
-    @EnvironmentObject var user: User
 
-    var body: some View {
-        TextField("Name", text: $user.name).border(/*@START_MENU_TOKEN@*/Color.black/*@END_MENU_TOKEN@*/)
-    }
-}
-
-struct DisplayView: View {
-    @EnvironmentObject var user: User
-
-    var body: some View {
-        Text(user.name)
-    }
-}
-struct EditView2: View  {
-    @EnvironmentObject var user: User
-
-    var body: some View {
-        TextField("Name:",text: $user.name)
-    }
-}
-
-struct DisplayView2: View  {
-    @EnvironmentObject var user: User
-
-    var body: some View {
-        Text(user.name)
-    }
-}
 struct ContentView: View {
-    @StateObject private var user = User()
-    var body: some View {
-        VStack {
+    @State private var selectedTab = "One"
+    @StateObject var updater = DelayedUpdater()
+    @State private var output = ""
 
-            EditView()
-            DisplayView()
+    var body: some View {
+        TabView (selection: $selectedTab){
+            Text("Tab 1")
+            Text("Value is: \(updater.value)")
+            Text(output)
+                .task {
+                    await fetchReadings()
+                }
+                .onTapGesture {
+                    selectedTab = "Two"
+                }
+                .tabItem {
+                    Label("One", systemImage: "star")
+                }.tag("One")
+            Text("Tab 2")
+            Text("Value is: \(updater.value)")
+                .onTapGesture {
+                    selectedTab = "One"
+                }
+                .tabItem {
+                    Label("Two", systemImage: "circle")
+                }.tag("Two")
         }
-        .padding()
-        .environmentObject(user)
+
+    }
+
+    func fetchReadings() async {
+        let fetchTask = Task { () -> String in
+            let url = URL(string: "https://hws.dev/readings.json")!
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let readings = try JSONDecoder().decode([Double].self, from: data)
+            return "Found \(readings.count) readings"
+        }
+
+        let result = await fetchTask.result   
+        switch result {
+            case .success(let str):
+                output = str
+            case .failure(let error):
+                output = "Error: \(error.localizedDescription)"
+        }
     }
 }
 
 #Preview {
     ContentView()
+}
+
+@MainActor class DelayedUpdater: ObservableObject {
+  //  @Published
+        var value = 0 {
+        willSet {
+            objectWillChange.send()
+        }
+    }
+
+    init() {
+        for i in 1...10 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i)) {
+                self.value += 1
+            }
+        }
+    }
 }
